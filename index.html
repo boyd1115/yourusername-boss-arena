@@ -1,38 +1,41 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Boss Arena</title>
-  <style>
-    html, body { height: 100%; margin: 0; background: #10141d; color: #f5f2ea; font-family: system-ui, sans-serif; }
-    body { display: grid; place-items: center; }
-    .box { width: min(460px, calc(100vw - 32px)); text-align: center; }
-    h1 { margin: 0 0 10px; font-size: 40px; }
-    p { color: #b8b1a5; line-height: 1.45; }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boss Arena</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#10141d;color:#f5f2ea;font-family:system-ui,Segoe UI,sans-serif}canvas{display:block;width:100vw;height:100vh;cursor:crosshair}.hud{position:fixed;inset:0;pointer-events:none}.boss{position:fixed;top:14px;left:50%;transform:translateX(-50%);width:min(720px,calc(100vw - 28px))}.player{position:fixed;right:14px;bottom:18px;width:min(240px,calc(100vw - 28px))}.panel{padding:10px;border:1px solid #ffffff29;border-radius:8px;background:#0e121acc;box-shadow:0 18px 42px #0007}.label{display:flex;justify-content:space-between;margin-bottom:7px;color:#b8b1a5;font-size:12px;font-weight:800;text-transform:uppercase}.bar{height:13px;border-radius:99px;overflow:hidden;background:#ffffff18;border:1px solid #ffffff25}.fill{height:100%;width:100%;transform-origin:left;transition:transform .08s linear}.bh{background:linear-gradient(90deg,#ff895f,#ef5b5b)}.ph{background:linear-gradient(90deg,#6ee7a8,#57a6ff)}.xp{background:linear-gradient(90deg,#f8c45c,#fff)}.cards{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(3,112px);gap:8px}.card{padding:9px;border:1px solid #ffffff29;border-radius:8px;background:#0e121acc}.card b{display:block;font-size:17px}.card span{display:block;color:#b8b1a5;font-size:12px}.center{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 30px));padding:22px;text-align:center;border:1px solid #ffffff29;border-radius:8px;background:#0c1018ef;box-shadow:0 24px 70px #0009}.center h1{margin:0 0 10px;font-size:42px}.center p{color:#b8b1a5;line-height:1.45}.center button{margin:8px;padding:12px 16px;border:0;border-radius:8px;background:#f8c45c;color:#17120a;font:inherit;font-weight:900;cursor:pointer}.hide{display:none}.float{position:fixed;left:50%;top:88px;transform:translateX(-50%);color:#f8c45c;font-weight:900;text-shadow:0 2px 8px #000}
+</style>
 </head>
 <body>
-  <main class="box">
-    <h1>Boss Arena</h1>
-    <p>Loading the arena...</p>
-  </main>
-  <script>
-    const chunkCount = 11;
-    const names = Array.from({ length: chunkCount }, (_, i) => `chunks/part${String(i).padStart(2, "0")}.txt`);
-    Promise.all(names.map((name) => fetch(name).then((res) => {
-      if (!res.ok) throw new Error(`Missing ${name}`);
-      return res.text();
-    }))).then((parts) => {
-      const binary = atob(parts.join(""));
-      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-      const html = new TextDecoder().decode(bytes);
-      document.open();
-      document.write(html);
-      document.close();
-    }).catch((error) => {
-      document.body.innerHTML = `<main class="box"><h1>Boss Arena</h1><p>Could not load the game: ${error.message}</p></main>`;
-    });
-  </script>
+<canvas id="c"></canvas>
+<div class="hud"><section class="panel boss"><div class="label"><span>The Hollow King</span><span id="bt"></span></div><div class="bar"><div id="bh" class="fill bh"></div></div></section><section class="panel player"><div class="label"><span>Warden</span><span id="pt"></span></div><div class="bar"><div id="ph" class="fill ph"></div></div><div class="label" style="margin-top:9px"><span id="lt">Level 1</span><span id="xt"></span></div><div class="bar"><div id="xp" class="fill xp"></div></div></section><div class="cards"><div class="card"><b>Left click</b><span>Arc shot</span></div><div class="card"><b>Right hold</b><span>Charge beam</span></div><div class="card"><b>Shift / E</b><span>Dash / burst</span></div></div></div>
+<section id="start" class="center"><h1>Boss Arena</h1><p>WASD to move. Aim with mouse. Left click shoots, right mouse charges a heavy beam, Shift dashes, E makes a nova. Break cover for heals or traps. Defeat stage 2.</p><button id="go">Start Fight</button></section>
+<section id="end" class="center hide"><h1 id="et"></h1><p id="ec"></p><button onclick="reset()">Retry</button></section><div id="msg" class="float"></div>
+<script>
+const canvas=c,ctx=c.getContext('2d'),keys={},mouse={x:0,y:0,r:false};let W=innerWidth,H=innerHeight,last=0,mode='menu',shake=0,msgTime=0;
+function size(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}addEventListener('resize',size);size();
+const rnd=(a,b)=>a+Math.random()*(b-a),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),ang=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+let p,b,shots,eshots,haz,obs,pick,txt,stage2;
+function reset(){p={x:W/2,y:H-120,r:18,hp:100,max:100,cd:0,dash:0,nova:0,charge:0,charging:false,level:1,xp:0,next:60,inv:0};b={x:W/2,y:150,r:38,hp:900,max:900,cd:1,sp:0,phase:1,tele:0};shots=[];eshots=[];haz=[];obs=[];pick=[];txt=[];stage2=false;for(let i=0;i<18;i++)obs.push({x:rnd(80,W-80),y:rnd(120,H-120),w:rnd(46,86),h:rnd(34,70),hp:60,max:60});mode='play';start.classList.add('hide');end.classList.add('hide');last=performance.now();requestAnimationFrame(loop)}
+go.onclick=reset;
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=1;if(e.key==='Shift')dash();if(e.key.toLowerCase()==='e')nova();if(e.key.toLowerCase()==='p')mode=mode==='play'?'pause':'play'});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=0);
+addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});addEventListener('contextmenu',e=>e.preventDefault());addEventListener('mousedown',e=>{if(mode!=='play')return;if(e.button===0)shoot();if(e.button===2){mouse.r=true;p.charging=true}});addEventListener('mouseup',e=>{if(e.button===2){mouse.r=false;beam()}});
+function text(s,x,y,col='#fff'){txt.push({s,x,y,col,t:1})}function gain(x){p.xp+=x;text('+'+x+' XP',p.x,p.y-35,'#f8c45c');while(p.xp>=p.next){p.xp-=p.next;p.level++;p.next=Math.floor(p.next*1.35);p.max+=8;p.hp=p.max;msg('LEVEL '+p.level);haz.push({x:p.x,y:p.y,r:20,max:140,t:.35,type:'heal'})}}
+function msg(s){document.getElementById('msg').textContent=s;msgTime=1.3}
+function shoot(){if(p.cd>0||p.charging)return;p.cd=.18;let a=Math.atan2(mouse.y-p.y,mouse.x-p.x);shots.push({x:p.x,y:p.y,vx:Math.cos(a)*760,vy:Math.sin(a)*760,r:7,d:16,life:1.2,col:'#77c8ff'})}
+function beam(){if(!p.charging)return;let pow=clamp(p.charge/1.1,.2,1),a=Math.atan2(mouse.y-p.y,mouse.x-p.x);p.charging=false;p.charge=0;p.cd=.9;shake=.25;haz.push({x:p.x,y:p.y,a,r:22,len:260+pow*620,d:90+pow*130,t:.16,type:'beam'});text('CHARGE!',p.x,p.y-45,'#f8c45c')}
+function dash(){if(p.dash>0||mode!=='play')return;let dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),l=Math.hypot(dx,dy)||1;p.x+=dx/l*150;p.y+=dy/l*150;p.x=clamp(p.x,20,W-20);p.y=clamp(p.y,80,H-20);p.dash=2;p.inv=.28;shake=.12}
+function nova(){if(p.nova>0||mode!=='play')return;p.nova=6;haz.push({x:p.x,y:p.y,r:30,max:170,d:75,t:.35,type:'nova'});shake=.22}
+function bossShot(speed,spread=0,count=1){let base=ang(b,p);for(let i=0;i<count;i++){let a=base+(i-(count-1)/2)*spread;eshots.push({x:b.x,y:b.y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,r:speed>500?8:14,d:speed>500?11:18,life:4,col:speed>500?'#ff6d5e':'#b884ff'})}}
+function hitBoss(d,x,y){b.hp-=d;text(Math.floor(d),x,y,'#fff');if(!stage2&&b.hp<=0){stage2=true;b.max=1300;b.hp=1300;b.r=46;b.phase=2;msg('STAGE 2');shake=.8;for(let i=0;i<10;i++)obs.push({x:rnd(70,W-70),y:rnd(120,H-80),w:rnd(44,80),h:rnd(34,68),hp:75,max:75})}else if(stage2&&b.hp<=0)finish(true)}
+function hurt(d){if(p.inv>0)return;p.hp-=d;p.inv=.35;shake=.22;if(p.hp<=0)finish(false)}
+function finish(win){mode='end';end.classList.remove('hide');et.textContent=win?'Victory':'Defeat';ec.textContent=win?'The Hollow King falls.':'The arena got you this time.'}
+function upd(dt){if(mode!=='play')return;p.cd-=dt;p.dash-=dt;p.nova-=dt;p.inv-=dt;b.cd-=dt;b.sp-=dt;shake=Math.max(0,shake-dt);msgTime=Math.max(0,msgTime-dt);if(!msgTime)msgEl.textContent='';let slow=p.charging?.48:1,dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),l=Math.hypot(dx,dy)||1;p.x+=dx/l*250*slow*dt;p.y+=dy/l*250*slow*dt;p.x=clamp(p.x,20,W-20);p.y=clamp(p.y,80,H-20);if(mouse.r&&p.charging)p.charge+=dt;if(b.cd<=0){bossShot(stage2?640:520,.1,stage2?3:1);b.cd=stage2?.45:.7}if(b.sp<=0){let choice=Math.random();if(choice<.34){bossShot(stage2?270:230,.35,stage2?9:7)}else if(choice<.67){haz.push({x:p.x,y:p.y,r:34,max:stage2?120:90,d:22,t:.9,type:'slam'})}else{b.x=clamp(p.x+rnd(-180,180),70,W-70);b.y=clamp(p.y+rnd(-160,120),90,H-90);haz.push({x:b.x,y:b.y,r:28,max:stage2?160:115,d:28,t:.55,type:'slam'})}b.sp=stage2?1.5:2.5}for(let s of shots){s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;if(dist(s,b)<s.r+b.r){hitBoss(s.d,s.x,s.y);s.life=0}for(let o of obs)if(s.x>o.x-o.w/2&&s.x<o.x+o.w/2&&s.y>o.y-o.h/2&&s.y<o.y+o.h/2){o.hp-=s.d;s.life=0;if(o.hp<=0){Math.random()<.45?pick.push({x:o.x,y:o.y,r:14,type:'heal'}):haz.push({x:o.x,y:o.y,r:20,max:85,d:18,t:.25,type:'trap'});gain(8)}}}for(let s of eshots){s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt;if(dist(s,p)<s.r+p.r){hurt(s.d);s.life=0}}for(let h of haz){h.t-=dt;if(h.type==='beam'){let ax=Math.cos(h.a),ay=Math.sin(h.a),px=b.x-h.x,py=b.y-h.y,proj=px*ax+py*ay,perp=Math.abs(px*ay-py*ax);if(proj>0&&proj<h.len&&perp<b.r+h.r)hitBoss(h.d*dt*8,b.x,b.y)}else{h.r+=(h.max-h.r)*dt*5;if(h.t<0&&dist(h,p)<h.r+p.r&&h.type!=='nova'&&h.type!=='heal')hurt(h.d);if(h.t<0&&dist(h,b)<h.r+b.r&&(h.type==='nova'||h.type==='heal'))hitBoss(h.d,b.x,b.y)}}for(let q of pick){if(dist(q,p)<q.r+p.r){p.hp=Math.min(p.max,p.hp+26);text('+HP',p.x,p.y-35,'#6ee7a8');q.dead=1}}shots=shots.filter(s=>s.life>0);eshots=eshots.filter(s=>s.life>0);haz=haz.filter(h=>h.t>-0.08);obs=obs.filter(o=>o.hp>0);pick=pick.filter(q=>!q.dead);txt.forEach(t=>{t.t-=dt;t.y-=30*dt});txt=txt.filter(t=>t.t>0);hud()}
+function hud(){ph.style.transform=`scaleX(${clamp(p.hp/p.max,0,1)})`;bh.style.transform=`scaleX(${clamp(b.hp/b.max,0,1)})`;xp.style.transform=`scaleX(${p.xp/p.next})`;pt.textContent=`${Math.ceil(p.hp)} / ${p.max}`;bt.textContent=`${stage2?'Stage 2  ':''}${Math.ceil(b.hp)} / ${b.max}`;lt.textContent='Level '+p.level;xt.textContent=`${Math.floor(p.xp)} / ${p.next} XP`}
+function draw(){let ox=(Math.random()-.5)*shake*18,oy=(Math.random()-.5)*shake*18;ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#10141d';ctx.fillRect(0,0,W,H);ctx.translate(ox,oy);let g=ctx.createRadialGradient(W/2,H/2,60,W/2,H/2,700);g.addColorStop(0,'#26354e');g.addColorStop(1,'#0d1119');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ffffff10';for(let x=0;x<W;x+=70){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=70){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}for(let o of obs){ctx.fillStyle='#303744';ctx.fillRect(o.x-o.w/2,o.y-o.h/2,o.w,o.h);ctx.fillStyle=o.hp/o.max>.45?'#f8c45c':'#ef5b5b';ctx.fillRect(o.x-o.w/2,o.y+o.h/2-7,o.w*(o.hp/o.max),4)}for(let h of haz){ctx.globalAlpha=h.type==='beam'?.8:.45;ctx.fillStyle=h.type==='trap'?'#ef5b5b':h.type==='nova'||h.type==='beam'?'#57a6ff':'#f8c45c';if(h.type==='beam'){ctx.save();ctx.translate(h.x,h.y);ctx.rotate(h.a);ctx.fillRect(0,-h.r,h.len,h.r*2);ctx.restore()}else{ctx.beginPath();ctx.arc(h.x,h.y,h.r,0,7);ctx.fill()}ctx.globalAlpha=1}for(let q of pick){ctx.fillStyle='#6ee7a8';ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,7);ctx.fill()}for(let s of shots.concat(eshots)){ctx.fillStyle=s.col;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()}actor(b.x,b.y,b.r,stage2?'#8e2633':'#5e2632','#ffcf5e');actor(p.x,p.y,p.r,p.inv>0?'#7cdfff':'#2877ce','#f8c45c');ctx.font='800 18px system-ui';ctx.textAlign='center';for(let t of txt){ctx.globalAlpha=t.t;ctx.fillStyle=t.col;ctx.fillText(t.s,t.x,t.y)}ctx.globalAlpha=1;if(p.charging){ctx.strokeStyle='#f8c45c';ctx.lineWidth=4+8*clamp(p.charge/1.1,0,1);ctx.beginPath();ctx.moveTo(p.x,p.y);let a=Math.atan2(mouse.y-p.y,mouse.x-p.x);ctx.lineTo(p.x+Math.cos(a)*520,p.y+Math.sin(a)*520);ctx.stroke()}}
+function actor(x,y,r,col,acc){ctx.shadowBlur=20;ctx.shadowColor=col;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#ffffffaa';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle=acc;ctx.beginPath();ctx.arc(x+r*.35,y-r*.18,r*.22,0,7);ctx.fill()}
+function loop(t){let dt=Math.min(.033,(t-last)/1000||0);last=t;upd(dt);draw();requestAnimationFrame(loop)}hud();requestAnimationFrame(loop);
+</script>
 </body>
 </html>
