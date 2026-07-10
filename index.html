@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boss Arena</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #10141d; color: #f5f2ea; font-family: system-ui, sans-serif; }
+    body { display: grid; place-items: center; }
+    .box { width: min(460px, calc(100vw - 32px)); text-align: center; }
+    h1 { margin: 0 0 10px; font-size: 40px; }
+    p { color: #b8b1a5; line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <main class="box">
+    <h1>Boss Arena</h1>
+    <p>Loading the arena...</p>
+  </main>
+  <script>
+    const chunkCount = 11;
+    const names = Array.from({ length: chunkCount }, (_, i) => `chunks/part${String(i).padStart(2, "0")}.txt`);
+    Promise.all(names.map((name) => fetch(name).then((res) => {
+      if (!res.ok) throw new Error(`Missing ${name}`);
+      return res.text();
+    }))).then((parts) => {
+      const binary = atob(parts.join(""));
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const html = new TextDecoder().decode(bytes);
+      document.open();
+      document.write(html);
+      document.close();
+    }).catch((error) => {
+      document.body.innerHTML = `<main class="box"><h1>Boss Arena</h1><p>Could not load the game: ${error.message}</p></main>`;
+    });
+  </script>
+</body>
+</html>
